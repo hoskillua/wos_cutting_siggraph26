@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>Fast Cutting of Cage Based Deformation with Walk on Spheres | SIGGRAPH 2026</title>
+	<meta
+		name="description"
+		content="Project page for the SIGGRAPH 2026 paper Fast Cutting of Cage Based Deformation with Walk on Spheres."
+	/>
+	<style>
+		:root {
+			--bg: #f6f3ea;
+			--paper: #fffdf7;
+			--ink: #1f1f1d;
+			--muted: #5f5a52;
+			--line: #d8d1c3;
+			--accent: #0e6b5c;
+			--accent-strong: #0a5146;
+			--chip: #e7f3ef;
+			--shadow: 0 18px 42px rgba(36, 26, 8, 0.12);
+			--radius: 14px;
+			--mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+		}
+
+		* {
+			box-sizing: border-box;
+		}
+
+		html,
+		body {
+			margin: 0;
+			padding: 0;
+			color: var(--ink);
+			background:
+				radial-gradient(1200px 420px at 85% -5%, #e6efe8 0%, transparent 60%),
+				radial-gradient(900px 280px at 12% 10%, #f0e9d8 0%, transparent 55%),
+				var(--bg);
+			font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
+			line-height: 1.6;
+			min-height: 100%;
+		}
+
+		a {
+			color: var(--accent);
+			text-decoration: none;
+		}
+
+		a:hover {
+			color: var(--accent-strong);
+			text-decoration: underline;
+		}
+
+		.container {
+			width: min(1040px, calc(100% - 2rem));
+			margin: 0 auto;
+		}
+
+		.hero {
+			padding: 3.5rem 0 1.5rem;
+			animation: rise-in 500ms ease-out both;
+		}
+
+		.title {
+			margin: 0;
+			font-size: clamp(1.8rem, 4vw, 3rem);
+			line-height: 1.18;
+			letter-spacing: 0.01em;
+			text-wrap: balance;
+		}
+
+		.venue {
+			margin-top: 0.8rem;
+			color: var(--muted);
+			font-size: 1.05rem;
+		}
+
+		.authors {
+			margin-top: 1.2rem;
+			font-size: 1.04rem;
+		}
+
+		.authors .sep {
+			color: #9f9a90;
+			padding: 0 0.35rem;
+		}
+
+		.affiliations {
+			color: var(--muted);
+			margin-top: 0.55rem;
+			font-size: 0.96rem;
+		}
+
+		.actions {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0.75rem;
+			margin-top: 1.5rem;
+		}
+
+		.btn {
+			border: 1px solid var(--line);
+			background: var(--paper);
+			color: var(--ink);
+			padding: 0.58rem 1rem;
+			border-radius: 999px;
+			font-size: 0.93rem;
+			font-weight: 600;
+			transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+		}
+
+		.btn:hover {
+			transform: translateY(-1px);
+			box-shadow: 0 7px 16px rgba(33, 24, 7, 0.12);
+			border-color: #bfb7a7;
+			text-decoration: none;
+		}
+
+		.btn.primary {
+			background: var(--accent);
+			border-color: var(--accent);
+			color: #fff;
+		}
+
+		.btn.primary:hover {
+			background: var(--accent-strong);
+			border-color: var(--accent-strong);
+		}
+
+		.teaser {
+			width: 100%;
+			margin: 2rem 0 0;
+			animation: rise-in 620ms ease-out 70ms both;
+		}
+
+		.teaser img,
+		.teaser video {
+			width: 100%;
+			height: auto;
+			display: block;
+			max-height: 820px;
+			object-fit: cover;
+		}
+
+		.teaser figcaption {
+			padding: 0.65rem 0;
+			color: var(--muted);
+			font-size: 0.95rem;
+		}
+
+		main {
+			padding: 1.7rem 0 3rem;
+		}
+
+		.grid {
+			display: grid;
+			grid-template-columns: 1.3fr 0.9fr;
+			gap: 1rem;
+			align-items: start;
+		}
+
+		.panel {
+			border: 1px solid var(--line);
+			background: var(--paper);
+			border-radius: var(--radius);
+			padding: 1.1rem 1.2rem;
+			box-shadow: 0 9px 24px rgba(40, 28, 10, 0.08);
+			animation: rise-in 520ms ease-out both;
+		}
+
+		h2 {
+			margin: 0 0 0.55rem;
+			font-size: 1.26rem;
+			line-height: 1.3;
+			letter-spacing: 0.01em;
+		}
+
+		p {
+			margin: 0.6rem 0 0;
+		}
+
+		.meta-list {
+			display: grid;
+			gap: 0.65rem;
+			margin-top: 0.65rem;
+		}
+
+		.meta-item {
+			border: 1px solid var(--line);
+			border-radius: 10px;
+			background: #fff;
+			padding: 0.65rem 0.75rem;
+		}
+
+		.meta-item strong {
+			display: block;
+			font-size: 0.9rem;
+			color: var(--muted);
+			margin-bottom: 0.2rem;
+		}
+
+		.badge {
+			display: inline-block;
+			padding: 0.16rem 0.48rem;
+			margin-left: 0.38rem;
+			border-radius: 999px;
+			border: 1px solid #b8dcd3;
+			background: var(--chip);
+			color: #0a4b3f;
+			font-size: 0.73rem;
+			font-weight: 700;
+			vertical-align: middle;
+			letter-spacing: 0.02em;
+		}
+
+		pre {
+			margin: 0.8rem 0 0;
+			background: #1d1d1b;
+			color: #f3ede1;
+			border-radius: 10px;
+			border: 1px solid #3a372f;
+			padding: 0.95rem;
+			overflow-x: auto;
+			font: 0.84rem/1.45 var(--mono);
+		}
+
+		footer {
+			margin: 2rem 0 2.6rem;
+			color: var(--muted);
+			font-size: 0.9rem;
+			text-align: center;
+			animation: rise-in 760ms ease-out both;
+		}
+
+		@keyframes rise-in {
+			from {
+				opacity: 0;
+				transform: translateY(10px);
+			}
+
+			to {
+				opacity: 1;
+				transform: translateY(0);
+			}
+		}
+
+		@media (max-width: 900px) {
+			.grid {
+				grid-template-columns: 1fr;
+			}
+
+			.hero {
+				padding-top: 2.5rem;
+			}
+
+			.title {
+				font-size: clamp(1.55rem, 7vw, 2.4rem);
+			}
+		}
+	</style>
+</head>
+<body>
+	<header class="hero">
+		<div class="container">
+			<h1 class="title">Fast Cutting of Cage Based Deformation with Walk on Spheres</h1>
+
+			<div class="venue">SIGGRAPH 2026</div>
+
+			<div class="authors">
+				<a href="#" aria-label="Hossam Saeed profile">Hossam Saeed<sup>1</sup></a>
+				<span class="sep">•</span>
+				<a href="#" aria-label="Michael Lambiri profile">Michael Lambiri<sup>1</sup></a>
+				<span class="sep">•</span>
+				<a href="#" aria-label="Teseo Schneider profile">Teseo Schneider<sup>2</sup></a>
+				<span class="sep">•</span>
+				<a href="#" aria-label="Derek Nowrouzezahrai profile">Derek Nowrouzezahrai<sup>1</sup></a>
+				<span class="sep">•</span>
+				<a href="#" aria-label="Paul G. Kry profile">Paul G. Kry<sup>1</sup></a>
+			</div>
+
+			<div class="affiliations">
+				<span><sup>1</sup>McGill University, Canada</span>
+				<span class="sep">•</span>
+				<span><sup>2</sup>University of Victoria, Canada</span>
+			</div>
+
+			<div class="actions">
+				<a class="btn primary" href="assets/paper.pdf" target="_blank" rel="noopener">Read Paper (PDF)</a>
+				<a class="btn" href="#abstract">Abstract</a>
+				<a class="btn" href="#citation">BibTeX</a>
+				<a class="btn" href="https://doi.org/10.1145/3799902.3811051" target="_blank" rel="noopener">DOI</a>
+				<a class="btn" href="#" aria-disabled="true">Code <span class="badge">Coming Soon</span></a>
+			</div>
+
+			<figure class="teaser">
+				<img
+					src="assets/teaser.png"
+					alt="Teaser image visualizing the core result of the paper."
+					loading="eager"
+				/>
+				<figcaption>
+					Cutting this physically simulated starfish is fast because we use walk on spheres to compute the harmonic weights of the embedded mesh with respect to the cage. Weight updates during progressive cutting are an order of magnitude faster than recomputation as most walks can be reused.
+				</figcaption>
+			</figure>
+		</div>
+	</header>
+
+	<main>
+		<div class="container grid">
+			<section id="abstract" class="panel" aria-labelledby="abstract-title">
+				<h2 id="abstract-title">Abstract</h2>
+				<p>
+					While cages provide a powerful reduction model to simulate elastic deformations, interactive real-time
+					cutting of cages has been a longstanding challenge. Traditional solvers require costly volumetric
+					re-meshing and global matrix updates after each modification. For mesh-free harmonic weight computation
+					using Walk on Spheres (WoS), we make a key observation: only a small fraction of walks (5-10%) is
+					invalidated by a local cut in most practical cases.
+				</p>
+				<p>
+					We propose a reuse pipeline that efficiently updates only the weights affected by topological
+					modifications. Our approach leverages WoS as an output-sensitive, mesh-free Monte Carlo method for
+					solving Laplacian equations, enabling localized harmonic-weight updates. By identifying and reusing
+					unaffected walks, we minimize re-walking work and preserve statistical accuracy.
+				</p>
+				<p>
+					Our method achieves 10x-40x speedups while remaining statistically identical to full WoS
+					recomputation. This enables real-time interactive cutting on complex 2D and 3D cages, and readily
+					generalizes to other local cage editing operations.
+				</p>
+			</section>
+
+			<aside class="panel" aria-label="Paper metadata and links">
+				<h2>Details</h2>
+				<div class="meta-list">
+					<div class="meta-item">
+						<strong>Conference</strong>
+						SIGGRAPH 2026
+					</div>
+					<div class="meta-item">
+						<strong>PDF</strong>
+						<a href="assets/paper.pdf" target="_blank" rel="noopener">paper.pdf</a>
+					</div>
+					<div class="meta-item">
+						<strong>DOI</strong>
+						<a href="https://doi.org/10.1145/3799902.3811051" target="_blank" rel="noopener">10.1145/3799902.3811051</a>
+					</div>
+					<div class="meta-item">
+						<strong>Status</strong>
+						Code and pretrained assets will be released after publication.
+					</div>
+				</div>
+			</aside>
+
+			<section id="citation" class="panel" aria-labelledby="citation-title">
+				<h2 id="citation-title">Citation</h2>
+				<p>Copy this BibTeX entry for citation.</p>
+				<pre><code>@inproceedings{saeed2026fast,
+	title     = {Fast Cutting of Cage Based Deformation with Walk on Spheres},
+	author    = {Saeed, Hossam and Lambiri, Michael and Schneider, Teseo and Nowrouzezahrai, Derek and Kry, Paul G.},
+	booktitle = {ACM SIGGRAPH 2026 Conference Papers},
+	year      = {2026},
+	doi       = {10.1145/3799902.3811051},
+	url       = {https://doi.org/10.1145/3799902.3811051}
+}</code></pre>
+			</section>
+		</div>
+	</main>
+
+	<footer>
+		This website is hosted on GitHub Pages. Replace placeholders before publishing your final version.
+	</footer>
+</body>
+</html>
