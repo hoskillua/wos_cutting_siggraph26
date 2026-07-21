@@ -39,6 +39,7 @@
 			font-family: "Palatino Linotype", "Book Antiqua", Palatino, serif;
 			line-height: 1.6;
 			min-height: 100%;
+			overflow-x: clip;
 		}
 
 		a {
@@ -154,9 +155,13 @@
 
 		.grid {
 			display: grid;
-			grid-template-columns: 1.3fr 0.9fr;
+			grid-template-columns: 1.6fr 0.7fr;
 			gap: 1rem;
 			align-items: start;
+		}
+
+		.grid > * {
+			min-width: 0;
 		}
 
 		.panel {
@@ -166,6 +171,7 @@
 			padding: 1.1rem 1.2rem;
 			box-shadow: 0 9px 24px rgba(40, 28, 10, 0.08);
 			animation: rise-in 520ms ease-out both;
+			min-width: 0;
 		}
 
 		h2 {
@@ -224,6 +230,42 @@
 			font: 0.84rem/1.45 var(--mono);
 		}
 
+		.citation-tools {
+			display: flex;
+			justify-content: space-between;
+			align-items: center;
+			margin-top: 0.8rem;
+			gap: 0.8rem;
+		}
+
+		.citation-tools h2 {
+			margin: 0;
+		}
+
+		.copy-btn {
+			border: 1px solid var(--line);
+			background: #fff;
+			color: var(--ink);
+			padding: 0.42rem 0.78rem;
+			border-radius: 999px;
+			font-size: 0.84rem;
+			font-weight: 600;
+			cursor: pointer;
+			transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+		}
+
+		.copy-btn:hover {
+			background: #f8f4ea;
+			border-color: #c3bcae;
+			transform: translateY(-1px);
+		}
+
+		.copy-btn.copied {
+			background: var(--chip);
+			border-color: #b8dcd3;
+			color: #0a4b3f;
+		}
+
 		footer {
 			margin: 2rem 0 2.6rem;
 			color: var(--muted);
@@ -249,6 +291,10 @@
 				grid-template-columns: 1fr;
 			}
 
+			aside[aria-label="Paper metadata and links"] {
+				display: none;
+			}
+
 			.hero {
 				padding-top: 2.5rem;
 			}
@@ -256,6 +302,81 @@
 			.title {
 				font-size: clamp(1.55rem, 7vw, 2.4rem);
 			}
+		}
+
+		@media (max-width: 700px) {
+			.container {
+				width: min(1040px, calc(100% - 1.25rem));
+			}
+
+			.hero {
+				padding: 2rem 0 1rem;
+			}
+
+			.title {
+				font-size: clamp(1.35rem, 7.8vw, 2rem);
+				line-height: 1.2;
+			}
+
+			.venue,
+			.authors,
+			.affiliations {
+				font-size: 0.92rem;
+			}
+
+			.authors,
+			.affiliations {
+				display: flex;
+				flex-wrap: wrap;
+				align-items: baseline;
+				gap: 0.2rem 0.35rem;
+			}
+
+			.authors .sep,
+			.affiliations .sep {
+				padding: 0;
+			}
+
+			.actions {
+				gap: 0.5rem;
+				margin-top: 1.1rem;
+			}
+
+			.btn {
+				padding: 0.5rem 0.86rem;
+				font-size: 0.84rem;
+			}
+
+			main {
+				padding: 1.15rem 0 2rem;
+			}
+
+			.panel {
+				padding: 0.92rem 0.95rem;
+				border-radius: 12px;
+			}
+
+			h2 {
+				font-size: 1.12rem;
+			}
+
+			pre {
+				padding: 0.75rem;
+				font-size: 0.77rem;
+			}
+
+			.citation-tools {
+				margin-top: 0.55rem;
+				flex-wrap: wrap;
+			}
+
+			.copy-btn {
+				padding: 0.36rem 0.7rem;
+				font-size: 0.8rem;
+				white-space: nowrap;
+				margin-left: auto;
+			}
+
 		}
 	</style>
 </head>
@@ -267,15 +388,15 @@
 			<div class="venue">SIGGRAPH 2026</div>
 
 			<div class="authors">
-				<a href="#" aria-label="Hossam Saeed profile">Hossam Saeed<sup>1</sup></a>
+				<span>Hossam Saeed<sup>1</sup></span>
 				<span class="sep">•</span>
-				<a href="#" aria-label="Michael Lambiri profile">Michael Lambiri<sup>1</sup></a>
+				<span>Michael Lambiri<sup>1</sup></span>
 				<span class="sep">•</span>
-				<a href="#" aria-label="Teseo Schneider profile">Teseo Schneider<sup>2</sup></a>
+				<a href="https://web.uvic.ca/~teseo/" target="_blank" rel="noopener" aria-label="Teseo Schneider profile">Teseo Schneider<sup>2</sup></a>
 				<span class="sep">•</span>
-				<a href="#" aria-label="Derek Nowrouzezahrai profile">Derek Nowrouzezahrai<sup>1</sup></a>
+				<a href="https://cim.mcgill.ca/~derek/" target="_blank" rel="noopener" aria-label="Derek Nowrouzezahrai profile">Derek Nowrouzezahrai<sup>1</sup></a>
 				<span class="sep">•</span>
-				<a href="#" aria-label="Paul G. Kry profile">Paul G. Kry<sup>1</sup></a>
+				<a href="https://www.cs.mcgill.ca/~kry/" target="_blank" rel="noopener" aria-label="Paul G. Kry profile">Paul G. Kry<sup>1</sup></a>
 			</div>
 
 			<div class="affiliations">
@@ -314,16 +435,11 @@
 					cutting of cages has been a longstanding challenge. Traditional solvers require costly volumetric
 					re-meshing and global matrix updates after each modification. For mesh-free harmonic weight computation
 					using Walk on Spheres (WoS), we make a key observation: only a small fraction of walks (5-10%) is
-					invalidated by a local cut in most practical cases.
-				</p>
-				<p>
-					We propose a reuse pipeline that efficiently updates only the weights affected by topological
-					modifications. Our approach leverages WoS as an output-sensitive, mesh-free Monte Carlo method for
-					solving Laplacian equations, enabling localized harmonic-weight updates. By identifying and reusing
-					unaffected walks, we minimize re-walking work and preserve statistical accuracy.
-				</p>
-				<p>
-					Our method achieves 10x-40x speedups while remaining statistically identical to full WoS
+					invalidated by a local cut in most practical cases. We propose a reuse pipeline that efficiently updates
+					only the weights affected by topological modifications. Our approach leverages WoS as an output-sensitive,
+					mesh-free Monte Carlo method for solving Laplacian equations, enabling localized harmonic-weight updates.
+					By identifying and reusing unaffected walks, we minimize re-walking work and preserve statistical
+					accuracy. Our method achieves 10x-40x speedups while remaining statistically identical to full WoS
 					recomputation. This enables real-time interactive cutting on complex 2D and 3D cages, and readily
 					generalizes to other local cage editing operations.
 				</p>
@@ -345,16 +461,18 @@
 						<a href="https://doi.org/10.1145/3799902.3811051" target="_blank" rel="noopener">10.1145/3799902.3811051</a>
 					</div>
 					<div class="meta-item">
-						<strong>Status</strong>
-						Code will be released soon.
+						<strong>Code</strong>
+						<span class="badge">Coming Soon</span>
 					</div>
 				</div>
 			</aside>
 
 			<section id="citation" class="panel" aria-labelledby="citation-title">
-				<h2 id="citation-title">Citation</h2>
-				<p>Copy this BibTeX entry for citation.</p>
-				<pre><code>@inproceedings{saeed2026woscut,
+				<div class="citation-tools">
+					<h2 id="citation-title">Citation</h2>
+					<button id="copy-bibtex" class="copy-btn" type="button" aria-label="Copy BibTeX to clipboard">Copy BibTeX</button>
+				</div>
+				<pre><code id="bibtex-code">@inproceedings{saeed2026woscut,
 	title     = {Fast Cutting of Cage Based Deformation with Walk on Spheres},
 	author    = {Saeed, Hossam and Lambiri, Michael and Schneider, Teseo and Nowrouzezahrai, Derek and Kry, Paul G.},
 	booktitle = {ACM SIGGRAPH 2026 Conference Papers},
@@ -369,5 +487,31 @@
 	<footer>
 		This website is hosted on GitHub Pages.
 	</footer>
+
+	<script>
+		const copyBibtexBtn = document.getElementById("copy-bibtex");
+		const bibtexCode = document.getElementById("bibtex-code");
+
+		if (copyBibtexBtn && bibtexCode) {
+			const defaultLabel = "Copy BibTeX";
+
+			copyBibtexBtn.addEventListener("click", async () => {
+				const citationText = bibtexCode.textContent || "";
+
+				try {
+					await navigator.clipboard.writeText(citationText);
+					copyBibtexBtn.textContent = "Copied";
+					copyBibtexBtn.classList.add("copied");
+				} catch {
+					copyBibtexBtn.textContent = "Press Ctrl+C";
+				}
+
+				setTimeout(() => {
+					copyBibtexBtn.textContent = defaultLabel;
+					copyBibtexBtn.classList.remove("copied");
+				}, 1400);
+			});
+		}
+	</script>
 </body>
 </html>
