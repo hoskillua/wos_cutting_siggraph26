@@ -143,6 +143,14 @@
 			object-fit: cover;
 		}
 
+		.panel video {
+			width: 100%;
+			height: auto;
+			display: block;
+			border-radius: 10px;
+			margin-top: 0.55rem;
+		}
+
 		.teaser figcaption {
 			padding: 0.65rem 0;
 			color: var(--muted);
@@ -162,6 +170,17 @@
 
 		.grid > * {
 			min-width: 0;
+		}
+
+		#abstract,
+		#video,
+		#citation {
+			grid-column: 1;
+		}
+
+		aside[aria-label="Paper metadata and links"] {
+			grid-column: 2;
+			grid-row: 1 / span 3;
 		}
 
 		.panel {
@@ -443,6 +462,14 @@
 					recomputation. This enables real-time interactive cutting on complex 2D and 3D cages, and readily
 					generalizes to other local cage editing operations.
 				</p>
+			</section>
+
+			<section id="video" class="panel" aria-labelledby="video-title">
+				<h2 id="video-title">Video</h2>
+				<video controls preload="metadata" playsinline aria-label="Project demonstration video for Fast Cutting of Cage Based Deformation with Walk on Spheres">
+					<source src="assets/woscut-vid.mp4" type="video/mp4" />
+					Your browser does not support the video tag.
+				</video>
 			</section>
 
 			<aside class="panel" aria-label="Paper metadata and links">
