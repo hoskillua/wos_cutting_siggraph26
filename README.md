@@ -4,8 +4,8 @@ Code for the SIGGRAPH 2026 paper by Hossam Saeed, Michael Lambiri, Teseo Schneid
 Paul G. Kry. [Project page](https://hoskillua.github.io/wos_cutting_siggraph26/) ·
 [Paper](assets/paper.pdf) · [DOI](https://doi.org/10.1145/3799902.3811051)
 
-A cage based elastic body is cut by a moving blade. Harmonic cage coordinates are computed with walk on
-spheres, and each cut step updates only the walks the cut affects instead of re-solving them. The code
+A cage based elastic body is cut by a moving blade. Harmonic coordinates are computed with walk on
+spheres, and each cut step updates only the walks the cut affects instead of re-solving all of them. The code
 handles 3D polyhedral cages (cut by a blade) and 2D cages (cut by a ray).
 
 ## Install
@@ -32,7 +32,7 @@ In the window, **Run all** begins the cut and runs the simulation, **Run sim** o
 the uncut body and keeps your blade and material edits. The **Case** section loads any case in the folder.
 The **Blade** section (under Cut) edits the blade. *Finite blade* limits it to a segment, and *start inside* lets
 it begin inside the material. Keys: `space` run / pause, `n` cut step, `b` begin cut, `r` reset
-the simulation. `ctrl` + drag pulls the mesh.
+the simulation.
 
 ## Repository structure
 
@@ -49,19 +49,21 @@ cagecut/
 data/  data2d/    the cases of the paper (3D / 2D)
 ```
 
-Cutting and weights only talk through the `CutDelta` returned by `Cutter.advance`: the swept simplices, the
-modified faces, and the vertices the cut created or moved. `Body` in `pipeline.py` ties the pieces together and
-can be used from a script:
+Cutting and weights only talk through the `CutDelta` returned by `Cutter.advance`. It describes one cut step:
+the new cut surface the blade opened (as triangles in 3D, segments in 2D), the cage faces that changed, and the
+vertices the cut created or moved. The walk update uses it to find which walks the step affects. `Body` in
+`pipeline.py` ties the pieces together and can be used from a script:
 
 ```python
 from cagecut.pipeline import Body
 from cagecut.scene import load_scene
 
 body = Body(load_scene("data/star-config.json"))
-body.run_cut(0)                  # begin and run cut 0, updating weights incrementally each step
+body.auto_cut = True             # every step() also advances the blade
+body.begin_cut(0)                # set up the first cut of the case
 for _ in range(100):
-    body.step()                  # one simulation step
-verts = body.mesh_positions()    # deformed embedded mesh
+    body.step()                  # cut step (weights updated incrementally) + one simulation step
+verts = body.mesh_positions()    # deformed embedded mesh, (N, 3)
 ```
 
 ## Adding your own case
@@ -96,18 +98,15 @@ root.
   "cut_amount": 0.02, "bounded": false, "plunge": false }
 ```
 
-  `point1`-`point2` is the blade line, `direction` the way it sweeps (the part perpendicular to the line is
-  used), `cut_amount` its travel per cut step. `bounded` makes the blade the segment `point1`-`point2`
-  instead of an infinite line, and `plunge` lets it begin inside the material. Without `direction`, `cut_angle`
-  (degrees) rotates a default direction about the line. The Blade section of the viewer places a blade
+  `point1`-`point2` is the blade line, `direction` the way it sweeps (or `cut_angle` in degrees), and
+  `cut_amount` its offset per step. `bounded` limits the blade to the segment `point1`-`point2`, and `plunge`
+  lets it start inside the material. The blade line must not be parallel to a cage face it crosses; if you get
+  "face N is parallel to the blade line", tilt it slightly. The viewer's Blade section places a blade
   interactively, and *Save blade* writes this file.
 
-  The blade line must not be parallel to a cage face it crosses. If you get "face N is parallel to the blade
-  line" (typical for an axis aligned blade on an axis aligned box), tilt the blade slightly.
-
-2D cases (see `data2d/`) use a `.npy` (or `.obj`) cage and a knife spec with `point` (or the cage edge
-`line_to_cut` and `cut_line_alpha` along it), `angle`, `initial_cut_amount`, plus optional `scripted_cuts` that
-start or grow cuts at given simulation steps.
+2D cases (see `data2d/`) use a `.npy` or `.obj` cage and a knife spec (`point`, or `line_to_cut` with
+`cut_line_alpha`, plus `angle` and `initial_cut_amount`), and optional `scripted_cuts` that start or grow cuts at
+given steps.
 
 ## Citation
 
