@@ -213,7 +213,7 @@ def debug_panel(st):
 	d = st.debug
 	_, d.rewalk_heat = psim.Checkbox("rewalk heat map (last update)", d.rewalk_heat)
 	_, d.onface_heat = psim.Checkbox("on-face heat map (last update)", d.onface_heat)
-	_, d.swept = psim.Checkbox("swept geometry (last step)", d.swept)
+	_, d.swept = psim.Checkbox("new cut geometry (last step)", d.swept)
 	_, d.weight_field = psim.Checkbox("weight field", d.weight_field)
 	if d.weight_field:
 		psim.SameLine()

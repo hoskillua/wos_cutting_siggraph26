@@ -1,4 +1,8 @@
-"""WalkSet: all walks of a set of query points, their per-walk cache and float64 weight sums."""
+"""WalkSet: all walks of a set of query points, their per-walk cache and float64 weight sums.
+
+The cache layout and the sums are described in kernels.py. Every walk is seeded by its point's seed and
+its walk index (paper Sec. 4.2), so a walk can be replayed exactly at any time.
+"""
 
 import time
 from dataclasses import dataclass
@@ -6,7 +10,7 @@ from dataclasses import dataclass
 import numpy as np
 import warp as wp
 
-from cagecut.wos import kernels as K
+from cagecut.wos import kernels
 from cagecut.wos.gpu_cage import GpuCage, dim_bundle
 
 
@@ -21,8 +25,8 @@ class SolveStats:
 @dataclass
 class UpdateStats:
 	n_walks: int = 0
-	n_rewalk: int = 0
-	n_onface: int = 0
+	n_rewalk: int = 0  # walks intersecting the new cut geometry
+	n_onface: int = 0  # walks only needing an on-face update
 	t_check_ms: float = 0.0
 	t_rewalk_ms: float = 0.0
 	t_onface_ms: float = 0.0
@@ -45,7 +49,7 @@ def point_seeds(seed, seed_base, uids):
 	return (x & np.uint64(0xFFFFFFFF)).astype(np.uint32).view(np.int32)
 
 
-# walks have very different lengths: small blocks free their SM slots sooner (measured ~10% faster than 256)
+# walks have very different lengths: small thread blocks free their GPU slots sooner (~10% faster than 256)
 WALK_BLOCK = 64
 
 
@@ -60,22 +64,22 @@ class WalkSet:
 		self.grads = bool(gradients)
 		self.device = wp.get_device(device)
 		self.seed_base = int(seed_base)
-		self.B = dim_bundle(self.dim)
+		self.fns = dim_bundle(self.dim)  # per-dimension Warp functions
 		self.bv_mode = "kdop" if params.bounding_volume == "kdop" else "aabb"
-		self.NA = int(self.B.bv[self.bv_mode][2].shape[0])
-		self.K = int(params.num_walks)
+		self.n_axes = int(self.fns.bv[self.bv_mode][2].shape[0])  # bounding volume axes
+		self.num_walks = int(params.num_walks)  # walks per point
 		pts = np.asarray(points, dtype=np.float64).reshape(-1, self.dim)
 		self.points = pts.copy()
-		self.uids = np.arange(pts.shape[0], dtype=np.int64)
+		self.uids = np.arange(pts.shape[0], dtype=np.int64)  # seed source; a moved point gets a new uid
 		self._next_uid = pts.shape[0]
 		self.num_points = pts.shape[0]
-		self.pcap = 0
-		self.vcap = 0
+		self.pcap = 0  # point capacity
+		self.vcap = 0  # vertex (column) capacity of the sums
 		self.nv = 0
 		self.solved = False
 		self.last_marks = {"rewalk": np.zeros(self.num_points, np.int32), "onface": np.zeros(self.num_points, np.int32)}
-		self._T = None
-		self._dT = None
+		self._W = None
+		self._dW = None
 		self._lists = None
 		self._alloc_points(self.num_points + max(16, self.num_points // 16))
 		self._upload_points()
@@ -87,35 +91,35 @@ class WalkSet:
 	def _alloc_points(self, pcap):
 		"""(Re)allocate everything sized by point capacity, keeping existing data."""
 		dev = self.device
-		Vec = self.B.Vec
+		Vec = self.fns.Vec
 		old = self.pcap
 		n = self.num_points if old > 0 else 0
-		C = self.K * pcap
+		C = self.num_walks * pcap
 		assert C < 2 ** 31, "num_walks * point capacity exceeds int32 cache indexing"
-		face = wp.full(C, -1, dtype=wp.int32, device=dev)
-		xcs = wp.zeros(C, dtype=Vec, device=dev)
-		gfs = wp.zeros(C if self.grads else 1, dtype=Vec, device=dev)
-		bv = wp.zeros((2 * self.NA, C), dtype=wp.float32, device=dev)
+		land_face = wp.full(C, -1, dtype=wp.int32, device=dev)
+		land_x = wp.zeros(C, dtype=Vec, device=dev)
+		gfac = wp.zeros(C if self.grads else 1, dtype=Vec, device=dev)
+		bv = wp.zeros((2 * self.n_axes, C), dtype=wp.float32, device=dev)
 		vc = max(self.vcap, 1)
-		S = wp.zeros((pcap, vc), dtype=wp.float64, device=dev)
-		m = wp.zeros(pcap, dtype=wp.float64, device=dev)
-		G = wp.zeros((pcap, vc, self.dim) if self.grads else (1, 1, self.dim), dtype=wp.float64, device=dev)
-		Gm = wp.zeros((pcap, self.dim) if self.grads else (1, self.dim), dtype=wp.float64, device=dev)
-		d0 = wp.zeros(pcap, dtype=wp.float32, device=dev)
-		mark_r = wp.zeros(pcap, dtype=wp.int32, device=dev)
-		mark_o = wp.zeros(pcap, dtype=wp.int32, device=dev)
+		wsum = wp.zeros((pcap, vc), dtype=wp.float64, device=dev)
+		nland = wp.zeros(pcap, dtype=wp.float64, device=dev)
+		gsum = wp.zeros((pcap, vc, self.dim) if self.grads else (1, 1, self.dim), dtype=wp.float64, device=dev)
+		gfac_sum = wp.zeros((pcap, self.dim) if self.grads else (1, self.dim), dtype=wp.float64, device=dev)
+		dist0 = wp.zeros(pcap, dtype=wp.float32, device=dev)
+		mark_rewalk = wp.zeros(pcap, dtype=wp.int32, device=dev)
+		mark_onface = wp.zeros(pcap, dtype=wp.int32, device=dev)
 		if old > 0 and n > 0:
-			wp.launch(K.relayout_kernel(self.B, self.bv_mode), dim=n * self.K, inputs=[n, old, pcap, self.face, self.xcs,
-				self.gfs, self.bv, face, xcs, gfs, bv, int(self.grads)], device=dev)
-			wp.launch(K.copy2d_f64, dim=(n, self.vcap), inputs=[self.S, S], device=dev)
-			wp.copy(m, self.m, count=n)
-			wp.copy(d0, self.d0, count=n)
+			wp.launch(kernels.relayout_kernel(self.fns, self.bv_mode), dim=n * self.num_walks, inputs=[n, old, pcap,
+				self.land_face, self.land_x, self.gfac, self.bv, land_face, land_x, gfac, bv, int(self.grads)], device=dev)
+			wp.launch(kernels.copy2d_f64, dim=(n, self.vcap), inputs=[self.wsum, wsum], device=dev)
+			wp.copy(nland, self.nland, count=n)
+			wp.copy(dist0, self.dist0, count=n)
 			if self.grads:
-				wp.launch(K.copy3d_f64, dim=(n, self.vcap, self.dim), inputs=[self.G, G], device=dev)
-				wp.launch(K.copy2d_f64, dim=(n, self.dim), inputs=[self.Gm, Gm], device=dev)
-		self.face, self.xcs, self.gfs, self.bv = face, xcs, gfs, bv
-		self.S, self.m, self.G, self.Gm, self.d0 = S, m, G, Gm, d0
-		self.mark_r, self.mark_o = mark_r, mark_o
+				wp.launch(kernels.copy3d_f64, dim=(n, self.vcap, self.dim), inputs=[self.gsum, gsum], device=dev)
+				wp.launch(kernels.copy2d_f64, dim=(n, self.dim), inputs=[self.gfac_sum, gfac_sum], device=dev)
+		self.land_face, self.land_x, self.gfac, self.bv = land_face, land_x, gfac, bv
+		self.wsum, self.nland, self.gsum, self.gfac_sum, self.dist0 = wsum, nland, gsum, gfac_sum, dist0
+		self.mark_rewalk, self.mark_onface = mark_rewalk, mark_onface
 		self.vcap = vc
 		self.pcap = pcap
 		self.points_wp = wp.zeros(pcap, dtype=Vec, device=dev)
@@ -143,18 +147,18 @@ class WalkSet:
 		if nv > self.vcap:
 			dev = self.device
 			vc = max(nv, int(self.vcap * 1.5) + 16)
-			S = wp.zeros((self.pcap, vc), dtype=wp.float64, device=dev)
-			wp.launch(K.copy2d_f64, dim=(self.pcap, self.vcap), inputs=[self.S, S], device=dev)
-			self.S = S
+			wsum = wp.zeros((self.pcap, vc), dtype=wp.float64, device=dev)
+			wp.launch(kernels.copy2d_f64, dim=(self.pcap, self.vcap), inputs=[self.wsum, wsum], device=dev)
+			self.wsum = wsum
 			if self.grads:
-				G = wp.zeros((self.pcap, vc, self.dim), dtype=wp.float64, device=dev)
-				wp.launch(K.copy3d_f64, dim=(self.pcap, self.vcap, self.dim), inputs=[self.G, G], device=dev)
-				self.G = G
+				gsum = wp.zeros((self.pcap, vc, self.dim), dtype=wp.float64, device=dev)
+				wp.launch(kernels.copy3d_f64, dim=(self.pcap, self.vcap, self.dim), inputs=[self.gsum, gsum], device=dev)
+				self.gsum = gsum
 			self.vcap = vc
 		self.nv = max(self.nv, nv)
 
 	def _worklists(self, n):
-		"""Reusable REWALK / ONFACE worklist buffers with room for n entries each."""
+		"""Reusable re-walk / on-face worklist buffers with room for n entries each."""
 		if self._lists is None or self._lists[0].shape[0] < n:
 			self._lists = (wp.empty(n, dtype=wp.int32, device=self.device), wp.empty(n, dtype=wp.int32, device=self.device))
 		return self._lists
@@ -175,8 +179,8 @@ class WalkSet:
 		if n == 0:
 			return
 		wl = ids if ids is not None else self._dummy_i32()
-		wp.launch(K.bound_kernel(self.B), dim=n, inputs=[cage.data, self.points_wp, wl, int(ids is not None), int(p0),
-			float(cage.diam / 64.0), self.d0], device=dev)
+		wp.launch(kernels.bound_kernel(self.fns), dim=n, inputs=[cage.data, self.points_wp, wl, int(ids is not None),
+			int(p0), float(cage.diam / 64.0), self.dist0], device=dev)
 
 	def _dummy_i32(self):
 		return wp.zeros(1, dtype=wp.int32, device=self.device)
@@ -186,10 +190,11 @@ class WalkSet:
 			return
 		p = self.params
 		wl = wlist if wlist is not None else self._dummy_i32()
-		wp.launch(K.walk_kernel(self.B, self.bv_mode, self.grads), dim=n, inputs=[cage.data, old.data, self.points_wp,
-			self.seeds_wp, self.d0, wl, int(wlist is not None), int(p0), int(max(npts, 1)), self.pcap, int(subtract),
-			float(p.eps), int(p.max_steps), float(p.eps_ngon), int(p.max_steps_ngon), self.face, self.xcs, self.gfs,
-			self.bv, self.S, self.m, self.G, self.Gm], device=self.device, block_dim=WALK_BLOCK)
+		wp.launch(kernels.walk_kernel(self.fns, self.bv_mode, self.grads), dim=n, inputs=[cage.data, old.data,
+			self.points_wp, self.seeds_wp, self.dist0, wl, int(wlist is not None), int(p0), int(max(npts, 1)), self.pcap,
+			int(subtract), float(p.eps), int(p.max_steps), float(p.eps_ngon), int(p.max_steps_ngon), self.land_face,
+			self.land_x, self.gfac, self.bv, self.wsum, self.nland, self.gsum, self.gfac_sum], device=self.device,
+			block_dim=WALK_BLOCK)
 
 	def solve(self, cage: GpuCage) -> SolveStats:
 		"""All walks of all points on `cage` (sums reset)."""
@@ -197,20 +202,21 @@ class WalkSet:
 		_sync(self.device)
 		t0 = time.perf_counter()
 		self._ensure_verts(cage.snapshot.num_verts)
-		self.S.zero_()
-		self.m.zero_()
-		self.G.zero_()
-		self.Gm.zero_()
+		self.wsum.zero_()
+		self.nland.zero_()
+		self.gsum.zero_()
+		self.gfac_sum.zero_()
 		P = self.num_points
 		self._bounds(cage, 0, P)
-		self._launch_walks(cage, cage, P * self.K, p0=0, npts=P)
+		self._launch_walks(cage, cage, P * self.num_walks, p0=0, npts=P)
 		_sync(self.device)
 		t = (time.perf_counter() - t0) * 1e3
 		self.solved = True
 		tf = self.terminated_fraction()
-		return SolveStats(P, P * self.K, float(tf.mean()) if P > 0 else 0.0, t)
+		return SolveStats(P, P * self.num_walks, float(tf.mean()) if P > 0 else 0.0, t)
 
 	def update(self, old: GpuCage, new: GpuCage, delta) -> "UpdateStats":
+		"""Incremental update after one cut step (update.py)."""
 		from cagecut.wos.update import incremental_update
 		return incremental_update(self, old, new, delta)
 
@@ -231,7 +237,7 @@ class WalkSet:
 		for key in ("rewalk", "onface"):
 			self.last_marks[key] = np.concatenate([self.last_marks[key], np.zeros(n, np.int32)])
 		self._bounds(cage, P, n)
-		self._launch_walks(cage, cage, n * self.K, p0=P, npts=n)
+		self._launch_walks(cage, cage, n * self.num_walks, p0=P, npts=n)
 		return ids
 
 	def reset_points(self, cage: GpuCage, ids, positions) -> None:
@@ -247,12 +253,12 @@ class WalkSet:
 		dev = self.device
 		n = int(ids.size)
 		ids_wp = wp.array(ids.astype(np.int32), dtype=wp.int32, device=dev)
-		wp.launch(K.zero_rows, dim=(n, self.vcap), inputs=[ids_wp, self.S, self.m, self.G, self.Gm, int(self.grads)],
-			device=dev)
+		wp.launch(kernels.zero_rows, dim=(n, self.vcap), inputs=[ids_wp, self.wsum, self.nland, self.gsum,
+			self.gfac_sum, int(self.grads)], device=dev)
 		self._bounds(cage, ids=ids_wp)
-		wl = wp.empty(n * self.K, dtype=wp.int32, device=dev)
-		wp.launch(K.expand_list, dim=n * self.K, inputs=[ids_wp, self.pcap, n, wl], device=dev)
-		self._launch_walks(cage, cage, n * self.K, wlist=wl)
+		wl = wp.empty(n * self.num_walks, dtype=wp.int32, device=dev)
+		wp.launch(kernels.expand_list, dim=n * self.num_walks, inputs=[ids_wp, self.pcap, n, wl], device=dev)
+		self._launch_walks(cage, cage, n * self.num_walks, wlist=wl)
 
 	# -----------------------------------------------------------------------------------------
 	# outputs
@@ -260,21 +266,21 @@ class WalkSet:
 
 	def weights_wp(self):
 		P, V = self.num_points, self.nv
-		if self._T is None or self._T.shape != (P, V):
-			self._T = wp.zeros((P, V), dtype=wp.float32, device=self.device)
+		if self._W is None or self._W.shape != (P, V):
+			self._W = wp.zeros((P, V), dtype=wp.float32, device=self.device)
 		if P > 0 and V > 0:
-			wp.launch(K.weights_kernel, dim=(P, V), inputs=[self.S, self.m, self._T], device=self.device)
-		return self._T
+			wp.launch(kernels.weights_kernel, dim=(P, V), inputs=[self.wsum, self.nland, self._W], device=self.device)
+		return self._W
 
 	def gradients_wp(self):
 		assert self.grads, "WalkSet created without gradients"
 		P, V = self.num_points, self.nv
-		if self._dT is None or self._dT.shape != (P, V, self.dim):
-			self._dT = wp.zeros((P, V, self.dim), dtype=wp.float32, device=self.device)
+		if self._dW is None or self._dW.shape != (P, V, self.dim):
+			self._dW = wp.zeros((P, V, self.dim), dtype=wp.float32, device=self.device)
 		if P > 0 and V > 0:
-			wp.launch(K.gradients_kernel, dim=(P, V), inputs=[self.S, self.m, self.G, self.Gm, self.dim, self._dT],
-				device=self.device)
-		return self._dT
+			wp.launch(kernels.gradients_kernel, dim=(P, V), inputs=[self.wsum, self.nland, self.gsum, self.gfac_sum,
+				self.dim, self._dW], device=self.device)
+		return self._dW
 
 	def weights(self) -> np.ndarray:
 		return self.weights_wp().numpy()
@@ -283,19 +289,19 @@ class WalkSet:
 		return self.gradients_wp().numpy()
 
 	def terminated_fraction(self) -> np.ndarray:
-		return self.m.numpy()[:self.num_points] / float(self.K)
+		return self.nland.numpy()[:self.num_points] / float(self.num_walks)
 
 	# cache access (debug)
 	def cache(self):
-		"""Per-walk cache as numpy, indexed [point, walk]: face, landing point, gradient factor, bv."""
-		P, Kw, pc = self.num_points, self.K, self.pcap
+		"""Per-walk cache as numpy, indexed [point, walk]: landing face, landing point, gradient factor, bv."""
+		P, Kw, pc = self.num_points, self.num_walks, self.pcap
 
 		def take(a):
 			a = a.reshape((Kw, pc) + a.shape[1:])[:, :P]
 			return np.swapaxes(a, 0, 1)
-		out = {"face": take(self.face.numpy()), "x": take(self.xcs.numpy())}
+		out = {"face": take(self.land_face.numpy()), "x": take(self.land_x.numpy())}
 		if self.grads:
-			out["g"] = take(self.gfs.numpy())
-		bv = self.bv.numpy().reshape(2 * self.NA, Kw, pc)[:, :, :P]
+			out["g"] = take(self.gfac.numpy())
+		bv = self.bv.numpy().reshape(2 * self.n_axes, Kw, pc)[:, :, :P]
 		out["bv"] = np.transpose(bv, (2, 1, 0))
 		return out

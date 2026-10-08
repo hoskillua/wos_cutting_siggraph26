@@ -1,15 +1,14 @@
-"""Cage-driven StVK elasticity: backward Euler with one Newton step.
+"""Cage-driven St. Venant-Kirchhoff (StVK) elasticity (paper Sec. 6.1): backward Euler, one Newton step.
 
 Degrees of freedom are the cage vertices x (V, dim). Deformation gradient at quadrature point q:
-F_q = sum_j x_j (outer) gradT_qj. Energy: sum_q w_q Psi(F_q) over active points with the
-plastic rest strain Er_q = E(F_q(rest)), so the rest configuration is exactly force free even
-though Monte Carlo gradients make F_q(rest) != I.
+F_q = sum_j x_j (outer) grad w_qj, from the harmonic weights w and their gradients. Energy: sum_q a_q Psi(F_q)
+over active points, with the plastic rest strain Er_q = E(F_q(rest)): the rest pose is exactly force
+free even though the Monte Carlo gradients make F_q(rest) != I.
 
-Quadrature weight w_q and density rho:
-	material.density given: w_q = quad_volume, rho = density.
-	material.density None (legacy): w_q = 1 / Q and rho = 1 for both energy and mass. This is
-	exactly the old code's scaling (forces and stiffness / Nq, masses sum_q T / Nq, i.e. total
-	mass 1 on a unit-volume domain), so legacy E values give the same dynamics.
+Quadrature weight a_q (self.w) and density rho:
+	material.density given: a_q = quad_volume, rho = density.
+	material.density None (the cases in data/): a_q = 1 / Q and rho = 1 for both energy and mass
+	(total mass 1 on a unit-volume domain), the scaling the E values of the cases were chosen for.
 
 Backward Euler, single Newton step from x_n (K = Hessian of the elastic energy, D = alpha M + beta K):
 	(M (1 + dt alpha) + (dt beta + dt^2) K) dv = dt (f(x_n) + M g + f_ext - D v_n - dt K v_n)
@@ -97,7 +96,8 @@ class ElasticSim:
 	def set_weights(self, T, G, active, rest_verts, alive):
 		"""Refresh weights after a solve or cut update.
 
-		T (Q, V), G (Q, V, dim) numpy or warp arrays; active (Q,) bool; rest_verts (V, dim);
+		T (Q, V) weights and G (Q, V, dim) weight gradients at the quadrature points (numpy or warp
+		arrays); active (Q,) bool; rest_verts (V, dim);
 		alive (V,) bool (dead vertices are excluded from the solve and kept fixed).
 		Recomputes lumped masses and the plastic rest strains.
 		"""
@@ -117,9 +117,9 @@ class ElasticSim:
 		self.alive = np.ones(V, dtype=bool) if alive is None else np.asarray(_to_numpy(alive), dtype=bool).reshape(-1)[:V].copy()
 		self.active = active.copy()
 
-		legacy = self.material.density is None
-		wq = (1.0 / max(Q, 1)) if legacy else self.quad_volume
-		rho = 1.0 if legacy else float(self.material.density)
+		unit_mass = self.material.density is None
+		wq = (1.0 / max(Q, 1)) if unit_mass else self.quad_volume
+		rho = 1.0 if unit_mass else float(self.material.density)
 		self.w = np.where(active, wq, 0.0)
 
 		m = rho * (self.w @ T)

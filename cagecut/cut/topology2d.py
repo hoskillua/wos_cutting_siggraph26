@@ -344,7 +344,7 @@ class Cutter2D:
 	def _empty_delta(self):
 		s = self.snapshot
 		e = np.zeros(0, dtype=_INT)
-		return CutDelta(dim=2, old=s, new=s, swept=np.zeros((0, 2, 2)), modified_faces=e,
+		return CutDelta(dim=2, old=s, new=s, new_cut=np.zeros((0, 2, 2)), modified_faces=e,
 			face_ancestor=np.arange(s.num_faces, dtype=_INT), new_vertices=e, orphaned_vertices=e.copy(),
 			moved_vertices=e.copy(), new_vertex_sources={}, topology_changed=False, completed=False,
 			plane_point=None if self.slit is None else self.slit.q.copy(),
@@ -409,7 +409,7 @@ class Cutter2D:
 		if 0 <= T < step.V_old and not np.array_equal(old.verts[T], self._pos[T]):
 			moved.append(T)
 		swept = np.array(step.swept, dtype=np.float64).reshape(-1, 2, 2)
-		return CutDelta(dim=2, old=old, new=new, swept=swept,
+		return CutDelta(dim=2, old=old, new=new, new_cut=swept,
 			modified_faces=np.array(sorted(step.modified), dtype=_INT), face_ancestor=anc,
 			new_vertices=np.arange(step.V_old, len(self._pos), dtype=_INT),
 			orphaned_vertices=np.array(step.orphaned, dtype=_INT), moved_vertices=np.array(moved, dtype=_INT),

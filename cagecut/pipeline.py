@@ -723,8 +723,8 @@ class Body:
 		for ws in (self.quad, self.mesh):
 			if ws is None:
 				continue
-			per = 4 + 4 * self.dim + (4 * self.dim if ws.grads else 0) + 4 * 2 * ws.NA
-			total += per * ws.K * ws.num_points
+			per = 4 + 4 * self.dim + (4 * self.dim if ws.grads else 0) + 4 * 2 * ws.n_axes
+			total += per * ws.num_walks * ws.num_points
 		return total
 
 	# -----------------------------------------------------------------------------------------

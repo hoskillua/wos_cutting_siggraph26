@@ -1,7 +1,7 @@
-"""CutDelta: everything the weight updater, embedding and sim need to know about one cut step.
+"""CutDelta: everything the weight update, the embedding and the sim need to know about one cut step.
 
-This is the only interface between cut topology and the rest of the system: the updater never
-reads halfedges.
+This is the only interface between the cut topology and the rest of the system (the minimal state of
+the incremental cut, paper Sec. 5.2): the weight update never reads halfedges.
 """
 
 from dataclasses import dataclass, field
@@ -17,14 +17,14 @@ class CutDelta:
 	old: CageSnapshot  # cage before the step
 	new: CageSnapshot  # cage after the step (vertex/face ids extend old ones)
 
-	# Geometry added to the domain boundary during this step, as simplices:
-	#   3D: (k, 3, 3) triangles covering the swept part of the cut plane
-	#   2D: (k, 2, 2) segments covered by the growing slit
-	# A walk is invalid iff one of its spheres intersects this set.
-	swept: np.ndarray
+	# New cut geometry: boundary added during this step, as simplices
+	#   3D: (k, 3, 3) triangles covering the part of the cut plane the blade swept this step
+	#   2D: (k, 2, 2) segments the slit grew by
+	# A walk must be re-walked iff one of its spheres intersects this set.
+	new_cut: np.ndarray
 
-	# OLD face ids whose vertex list or vertex positions changed (excluding faces that are
-	# simply unchanged). Walks landing on them need an on-face re-evaluation.
+	# OLD face ids whose vertex list or vertex positions changed. Walks landing on them need an
+	# on-face update.
 	modified_faces: np.ndarray
 
 	# For every NEW face id: the OLD face id it descends from (itself if it already existed,
@@ -66,4 +66,4 @@ class CutDelta:
 
 	@property
 	def empty(self):
-		return self.swept.shape[0] == 0 and self.modified_faces.size == 0 and not self.topology_changed
+		return self.new_cut.shape[0] == 0 and self.modified_faces.size == 0 and not self.topology_changed

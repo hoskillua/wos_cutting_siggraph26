@@ -443,9 +443,9 @@ class Viz:
 				rm("Swept", error_if_absent=False)
 			except TypeError:
 				pass
-		if not st.debug.swept or delta is None or delta.swept.shape[0] == 0:
+		if not st.debug.swept or delta is None or delta.new_cut.shape[0] == 0:
 			return
-		sw = delta.swept
+		sw = delta.new_cut
 		if self.dim == 3:
 			v = sw.reshape(-1, 3)
 			ps.register_surface_mesh("Swept", v, np.arange(v.shape[0]).reshape(-1, 3), color=(0.9, 0.1, 0.6))

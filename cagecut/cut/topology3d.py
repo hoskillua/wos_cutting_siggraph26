@@ -1225,7 +1225,7 @@ class Cutter3D:
 		joined two loops) whose sides now lie in different pieces become real boundary. A walk that landed on
 		the parent next to such a slit would be relocated on-face to a piece whose boundary passes through
 		its landing point (ambiguous within rounding, unlike a fresh walk), so every separated slit edge goes
-		into `swept` as a degenerate triangle: walks near it are rewalked (exact reuse)."""
+		into `new_cut` as a degenerate triangle: walks near it are rewalked (exact reuse)."""
 		X = self._pos
 		owner = {}
 		for g in kids:
@@ -1247,7 +1247,7 @@ class Cutter3D:
 	def _empty_delta(self):
 		s = self.snapshot
 		e = np.zeros(0, dtype=_INT)
-		return CutDelta(dim=3, old=s, new=s, swept=np.zeros((0, 3, 3)), modified_faces=e,
+		return CutDelta(dim=3, old=s, new=s, new_cut=np.zeros((0, 3, 3)), modified_faces=e,
 			face_ancestor=np.arange(s.num_faces, dtype=_INT), new_vertices=e, orphaned_vertices=e.copy(),
 			moved_vertices=e.copy(), new_vertex_sources={}, topology_changed=False, completed=False,
 			plane_point=None if self.blade is None else self.blade.p1.copy(),
@@ -1346,7 +1346,7 @@ class Cutter3D:
 		# tips, and tips that stopped this step (blade ends), are the only existing vertices that move
 		moved = [v for v in range(step.V_old) if self._valive[v] and not np.array_equal(old.verts[v], self._pos[v])]
 		swept = np.array(step.tris, dtype=np.float64).reshape(-1, 3, 3)
-		return CutDelta(dim=3, old=old, new=new, swept=swept,
+		return CutDelta(dim=3, old=old, new=new, new_cut=swept,
 			modified_faces=np.array(sorted(step.modified), dtype=_INT), face_ancestor=anc,
 			new_vertices=np.arange(step.V_old, len(self._pos), dtype=_INT),
 			orphaned_vertices=np.array(step.orphaned, dtype=_INT), moved_vertices=np.array(moved, dtype=_INT),
