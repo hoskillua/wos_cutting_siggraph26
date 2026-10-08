@@ -1,0 +1,8 @@
+{
+	"cage_file": "data/star-cage-loose.obj",
+	"mesh_file": "data/star-mesh-16k.obj",
+	"quad_points_file": "data/star-quad-points-all.npy",
+	"cut_spec": "data/cut-spec-star.json",
+	"E": 32,
+	"pinned_faces": [46]
+}

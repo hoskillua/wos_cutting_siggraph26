@@ -1,0 +1,9 @@
+{
+	"cage_file": "data/sphere-cage.obj",
+	"mesh_file": "data/sphere-mesh-6.obj",
+	"quad_points_file": "data/sphere-quad-points.npy",
+	"cut_spec": "data/cut-spec-sphere.json",
+
+	"E": 40,
+	"pinned_faces": [0]
+}

@@ -1,0 +1,9 @@
+{
+	"cage_file": "data/octo-alpha-cage2.obj",
+	"mesh_file": "data/octo-remesh.obj",
+	"quad_points_file": "data/octo-quad-points.npy",
+	"cut_spec": "data/cut-spec-octo-2.json",
+	"E": 34,
+
+	"pinned_faces": [7, 406, 33, 182, 171, 103, 347, 71, 396]
+}

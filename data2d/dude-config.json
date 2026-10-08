@@ -1,0 +1,21 @@
+{
+	"cage_file": "data2d/dude_cage.npy",
+	"points_file": "",
+	"quad_points_file": "data2d/dude_quad_points.npy",	
+	"E": 8,
+	"g": -1,
+	"pinned_verts": [0,1],	
+	"cut_spec": "data2d/dude_cut1.json",
+	"scripted_cuts" : [
+    {
+      "step"               : 10,
+      "mode"               : "first",
+      "line_to_cut"        : 5,
+      "alpha"              : 0.65,
+      "amount"     		   : 0.01,
+      "angle"              : -0.2
+    },
+
+    {"step":  14, "period": 2, "mode": "grow", "growth_amount" : 0.003, "repeat": 100 }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+	"cage_file": "data/jelly-cage_no_int.obj",
+	"mesh_file": "data/jelly-mesh.obj",
+	"quad_points_file": "data/jelly-no-int-quad-points.npy",
+	"cut_spec": "data/cut-spec-jelly.json",
+	"E": 80,
+	"pinned_faces": [6,8,9,10]
+}
